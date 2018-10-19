@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-export K8S_VER=${K8S_VER:-v1.9.2}
+export K8S_VER=${K8S_VER:-v1.10.0}
 export MINIKUBE_VER=${MINIKUBE_VER:-v0.25.0}
 set -x
 
@@ -30,6 +30,34 @@ fi
 
 
 export KUBECONFIG=${KUBECONFIG:-$GOPATH/minikube.conf}
+
+function setupCniBridgePlugin() {
+    export CNI_CONF_DIR={$CNI_CONF_DIR:-/etc/cni/net.d}
+    if [ ! -d ${CNI_CONF_DIR} ]; then
+        sudo mkdir -p ${CNI_CONF_DIR}
+    fi
+    cat > ${CNI_CONF_DIR}/10-bridge.conf <<EOF
+{
+  "name": "kubernetes.io",
+  "type": "bridge",
+  "bridge": "minikubebr",
+  "mtu": 1460,
+  "addIf": "true",
+  "isGateway": true,
+  "ipMasq": true,
+  "ipam": {
+    "type": "host-local",
+    "subnet": "10.1.0.0/16",
+    "gateway": "10.1.0.1",
+    "routes": [
+      {
+        "dst": "0.0.0.0/0"
+      }
+    ]
+  }
+}
+EOF
+}
 
 function waitMinikube() {
     set +e
@@ -61,8 +89,12 @@ function startMinikubeNone() {
     export MINIKUBE_WANTREPORTERRORPROMPT=false
     export MINIKUBE_HOME=$HOME
     export CHANGE_MINIKUBE_NONE_USER=true
+
+    setupCniBridgePlugin
     sudo -E minikube start \
-         --kubernetes-version=v1.9.0 \
+         --kubernetes-version=v1.10.0 \
+         --network-plugin=cni \
+         --extra-config=kubelet.network-plugin=cni \
          --vm-driver=none \
          --extra-config=apiserver.Admission.PluginNames="NamespaceLifecycle,LimitRanger,ServiceAccount,DefaultStorageClass,DefaultTolerationSeconds,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,ResourceQuota"
     sudo -E minikube update-context
