@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-export K8S_VER=${K8S_VER:-v1.10.0}
+export K8S_VER=${K8S_VER:-v1.9.2}
 export MINIKUBE_VER=${MINIKUBE_VER:-v0.25.0}
 set -x
 
@@ -32,11 +32,19 @@ fi
 export KUBECONFIG=${KUBECONFIG:-$GOPATH/minikube.conf}
 
 function setupCniBridgePlugin() {
-    export CNI_CONF_DIR={$CNI_CONF_DIR:-/etc/cni/net.d}
+    export CNI_CONF_DIR=${CNI_CONF_DIR:-/etc/cni/net.d}
+    export CNI_BIN_DIR=${CNI_BIN_DIR:-/opt/cni/bin}
+    export CNI_BIN_RELEASE=${CNI_BIN_RELEASE:-https://github.com/containernetworking/plugins/releases/download/v0.6.0/cni-plugins-amd64-v0.6.0.tgz}
     if [ ! -d ${CNI_CONF_DIR} ]; then
         sudo mkdir -p ${CNI_CONF_DIR}
     fi
-    cat > ${CNI_CONF_DIR}/10-bridge.conf <<EOF
+    if [ ! -d ${CNI_BIN_DIR} ]; then
+        sudo mkdir -p ${CNI_BIN_DIR}
+    fi
+
+    sudo chown -R "$(id -u)" ${CNI_CONF_DIR}
+    sudo chown -R "$(id -u)" ${CNI_BIN_DIR}
+    cat > 10-bridge.conf <<EOF
 {
   "name": "kubernetes.io",
   "type": "bridge",
@@ -57,6 +65,9 @@ function setupCniBridgePlugin() {
   }
 }
 EOF
+    sudo mv 10-bridge.conf ${CNI_CONF_DIR}/10-bridge.conf
+    # get the standard plugin binaries (bridge, loopback, etc)
+    curl -Lo cni-plugins.tgz ${CNI_BIN_RELEASE} && tar -zxvf cni-plugins.tgz -C /opt/cni/bin --strip-components=1 
 }
 
 function waitMinikube() {
@@ -91,8 +102,9 @@ function startMinikubeNone() {
     export CHANGE_MINIKUBE_NONE_USER=true
 
     setupCniBridgePlugin
+
     sudo -E minikube start \
-         --kubernetes-version=v1.10.0 \
+         --kubernetes-version=v1.9.0 \
          --network-plugin=cni \
          --extra-config=kubelet.network-plugin=cni \
          --vm-driver=none \
